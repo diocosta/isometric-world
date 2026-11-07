@@ -31,11 +31,20 @@
   // Terrain colours are read by the canvas, so they live here; the UI colours live in style.css.
   const PALETTES = {
     light: {
-      water: ['#95d0e0', '#79bed8', '#64abcd', '#5299c1', '#4a8db7'],
-      wave: 'rgba(255,255,255,0.5)',
+      water: ['#9ad7df', '#7cc3d9', '#65aecf', '#5299c1', '#4a8db7'],
+      wave: 'rgba(255,255,255,0.45)',
+      foam: 'rgba(255,255,255,0.8)',
+      sand: '#ecdcab',
+      fields: ['#a9c86d', '#cbca7d', '#b8d07c', '#d8c886', '#9dc46b', '#c4b46f'],
+      tuft: ['rgba(52,96,36,0.38)', 'rgba(255,255,225,0.4)'],
+      pave: '#d6d2c8',
+      road: '#9e9b94',
+      bshadow: 'rgba(25,38,48,0.2)',
+      boardShadow: 'rgba(24,52,68,0.5)',
+      cloud: { body: '#ffffff', under: '#dce6ee', alpha: 0.93, shadow: 'rgba(30,58,74,0.12)' },
       top: {
         g: '#93c46a', f: '#82b864', j: '#64a556', t: '#97b98c', p: '#c9cd84', s: '#d6c681', d: '#ebd297',
-        u: '#bcc7ac', i: '#eef4f8', h: '#c1ac8c', m: '#a69583', n: '#a69583', c: '#c4bdb0',
+        u: '#bcc7ac', i: '#eef4f8', h: '#c1ac8c', m: '#a69887', n: '#a69887', c: '#c6c8ad',
       },
       side: {
         earth: ['#a97f57', '#8e6847'],
@@ -45,7 +54,7 @@
         city: ['#b7ad9e', '#9c9282'],
       },
       slab: ['#64abcd', '#a37854', '#8a6343', '#6e5036'],
-      peak: ['#c3b4a2', '#a39483', '#8e7f6e', '#b2a391'],
+      peak: ['#c8beb1', '#a69a8c', '#8d8275', '#b6aa9c'],
       snow: ['#ffffff', '#e4ebf2'],
       tree: { f: ['#4f8d3f', '#6aa956'], j: ['#2f7b3b', '#47944d'], t: ['#4a7a58', '#649470'], s: ['#7b8e3a', '#97a74c'] },
       trunk: '#6d4b30',
@@ -70,9 +79,18 @@
     dark: {
       water: ['#1e4b69', '#173d58', '#12314a', '#0e283e', '#0b2134'],
       wave: 'rgba(160,200,230,0.18)',
+      foam: 'rgba(160,205,235,0.38)',
+      sand: '#6b6347',
+      fields: ['#3e5b37', '#56583a', '#48603b', '#5d5b3d', '#3b5634', '#504b34'],
+      tuft: ['rgba(0,0,0,0.28)', 'rgba(200,225,185,0.12)'],
+      pave: '#3b3e42',
+      road: '#28292d',
+      bshadow: 'rgba(0,0,0,0.32)',
+      boardShadow: 'rgba(0,0,0,0.65)',
+      cloud: { body: '#3a4a5d', under: '#2a3848', alpha: 0.5, shadow: null },
       top: {
         g: '#35573a', f: '#2f5035', j: '#244629', t: '#3a5446', p: '#535839', s: '#5d5638', d: '#74643f',
-        u: '#4b5448', i: '#a4b4c3', h: '#5e5243', m: '#544a40', n: '#544a40', c: '#3c3f44',
+        u: '#4b5448', i: '#a4b4c3', h: '#5e5243', m: '#544a40', n: '#544a40', c: '#3d423d',
       },
       side: {
         earth: ['#3f2f22', '#33271d'],
@@ -354,9 +372,9 @@
     for (const ch of BIOMES) {
       if (ch === '~') continue;
       const base = P.top[ch];
-      top[B[ch]] = [shade(base, -0.035), base, shade(base, 0.035)];
+      top[B[ch]] = [shade(base, -0.025), base, shade(base, 0.025)];
     }
-    const water = P.water.map((c) => [c, shade(c, 0.04)]);
+    const water = P.water.map((c) => [c, shade(c, 0.012)]);
     return { top, water };
   }
 
@@ -417,8 +435,81 @@
       p.closePath();
     };
 
-    // Pass 1: the sea, batched by colour, with a few wave glints.
+    const isoPt = (u, v, h) => [ox + ((u - v) / 2) * s, oy + ((u + v) / 4) * s - h * L];
+    // A rectangle in grid space (x east, y south), drawn flat at level h.
+    const gridQuad = (p, x0, y0, x1, y1, h) => {
+      const [ua, va] = rot(x0, y0, k);
+      const [ub, vb] = rot(x1, y1, k);
+      const u0 = Math.min(ua, ub);
+      const u1 = Math.max(ua, ub);
+      const v0 = Math.min(va, vb);
+      const v1 = Math.max(va, vb);
+      const a = isoPt(u0, v0, h);
+      const b = isoPt(u1, v0, h);
+      const c = isoPt(u1, v1, h);
+      const d = isoPt(u0, v1, h);
+      p.moveTo(a[0], a[1]);
+      p.lineTo(b[0], b[1]);
+      p.lineTo(c[0], c[1]);
+      p.lineTo(d[0], d[1]);
+      p.closePath();
+    };
+    // The same in turned-grid space, for strips along a tile's edges.
+    const turnedQuad = (p, u0, v0, u1, v1, h) => {
+      const a = isoPt(u0, v0, h);
+      const b = isoPt(u1, v0, h);
+      const c = isoPt(u1, v1, h);
+      const d = isoPt(u0, v1, h);
+      p.moveTo(a[0], a[1]);
+      p.lineTo(b[0], b[1]);
+      p.lineTo(c[0], c[1]);
+      p.lineTo(d[0], d[1]);
+      p.closePath();
+    };
+    const wet = (j) => j < 0 || biome[j] === B['~'];
+    const detail = s >= 40;
+    const BEACHY = new Set([B.g, B.f, B.j, B.p, B.s, B.d]);
+    const FARMS = new Set([B.g, B.p]);
+    const TUFTED = new Set([B.g, B.p, B.s, B.f, B.j, B.t, B.u]);
+    const latOf = (r) => w.lat0 - (r + 0.5);
+    const farmland = (c, r) => FARMS.has(biome[r * cols + c]) && Math.abs(latOf(r)) > 10 && Math.abs(latOf(r)) < 60 && hash2(c, r, 3) < 0.6;
+
+    // Patchwork of four fields, with hedges between them.
+    const farm = (c, r, h, pathOf) => {
+      const m = 0.04;
+      for (let q = 0; q < 4; q++) {
+        const qx = (q & 1) * 0.5;
+        const qy = (q >> 1) * 0.5;
+        const color = P.fields[Math.floor(hash2(c * 2 + (q & 1), r * 2 + (q >> 1), 9) * P.fields.length)];
+        gridQuad(pathOf(color), c + qx + m, r + qy + m, c + qx + 0.5 - m, r + qy + 0.5 - m, h);
+      }
+    };
+    const tuftsOn = (c, r, h, paths2) => {
+      const l = s * 0.03;
+      for (let n = 0; n < 5; n++) {
+        const [u, v] = rot(c + 0.12 + hash2(c, r, 50 + n) * 0.76, r + 0.12 + hash2(c, r, 60 + n) * 0.76, k);
+        const [x, y] = isoPt(u, v, h);
+        const t = paths2[n & 1];
+        t.moveTo(x - l * 0.6, y);
+        t.lineTo(x - l * 0.25, y - l * 1.1);
+        t.moveTo(x, y);
+        t.lineTo(x + l * 0.05, y - l * 1.5);
+        t.moveTo(x + l * 0.6, y);
+        t.lineTo(x + l * 0.3, y - l * 1.05);
+      }
+    };
+    const strokeTufts = (paths2) => {
+      g.lineCap = 'round';
+      g.lineWidth = Math.max(0.8, s * 0.009);
+      g.strokeStyle = P.tuft[0];
+      g.stroke(paths2[0]);
+      g.strokeStyle = P.tuft[1];
+      g.stroke(paths2[1]);
+    };
+
+    // Pass 1: the sea, batched by colour, with small wave glints.
     const waves = new Path2D();
+    const glint = detail ? 0.8 : 0.88;
     for (let iv = iv0; iv < iv1; iv++) {
       for (let iu = iu0; iu < iu1; iu++) {
         const i = index(iu, iv);
@@ -427,21 +518,42 @@
         const r = (i / cols) | 0;
         const hv = hash2(c, r);
         diamond(pathFor(SW.water[Math.min(depth[i], 5) - 1][hv < 0.5 ? 0 : 1]), iu, iv, 0);
-        if (depth[i] >= 3 && hv > 0.9) {
-          const x = ox + ((iu - iv) / 2) * s;
-          const y = oy + ((iu + iv) / 4 + 0.25) * s;
-          waves.moveTo(x - s * 0.14, y + s * 0.02);
-          waves.lineTo(x + s * 0.02, y - s * 0.06);
+        if (depth[i] >= 2 && hv > glint) {
+          const x = ox + ((iu - iv) / 2) * s + (hash2(c, r, 2) - 0.5) * s * 0.3;
+          const y = oy + ((iu + iv) / 4 + 0.25) * s + (hash2(c, r, 4) - 0.5) * s * 0.12;
+          const ww = s * 0.11;
+          waves.moveTo(x - ww, y);
+          waves.quadraticCurveTo(x - ww / 2, y - ww * 0.45, x, y);
+          waves.quadraticCurveTo(x + ww / 2, y - ww * 0.45, x + ww, y);
         }
       }
     }
     flush();
     g.strokeStyle = P.wave;
-    g.lineWidth = Math.max(1, s * 0.045);
+    g.lineWidth = Math.max(0.8, s * 0.022);
     g.lineCap = 'round';
     g.stroke(waves);
 
-    // Pass 2: lowland (level 1), batched by colour, with the little cliffs down to the sea.
+    // Pass 2: lowland (level 1) with fields, beaches and surf, batched by colour.
+    const fields = new Map();
+    const fieldPath = (color) => {
+      let p = fields.get(color);
+      if (!p) {
+        p = new Path2D();
+        fields.set(color, p);
+      }
+      return p;
+    };
+    const sand = new Path2D();
+    const foam = new Path2D();
+    const tufts = [new Path2D(), new Path2D()];
+    const surf = (iu, iv, right) => {
+      const x = ox + ((iu - iv) / 2) * s;
+      const y = oy + ((iu + iv) / 4) * s;
+      const d = s * 0.035;
+      foam.moveTo(x + (right ? s / 2 : -s / 2), y + s / 4 + d);
+      foam.lineTo(x, y + s / 2 + d);
+    };
     for (let iv = iv0; iv < iv1; iv++) {
       for (let iu = iu0; iu < iu1; iu++) {
         const i = index(iu, iv);
@@ -451,14 +563,43 @@
         const r = (i / cols) | 0;
         const hv = hash2(c, r, 1);
         diamond(pathFor(SW.top[b][hv < 0.33 ? 0 : hv < 0.66 ? 1 : 2]), iu, iv, 1);
-        const sides = P.side[material(b)];
-        const hr = hOf(index(iu + 1, iv));
-        const hl = hOf(index(iu, iv + 1));
-        if (hr < 1) face(pathFor(sides[1]), iu, iv, 1, hr, true);
-        if (hl < 1) face(pathFor(sides[0]), iu, iv, 1, hl, false);
+        const beachy = BEACHY.has(b) && Math.abs(latOf(r)) < 56 && hash2(c, r, 7) < 0.85;
+        const sides = beachy ? P.side.sand : P.side[material(b)];
+        const jR = index(iu + 1, iv);
+        const jL = index(iu, iv + 1);
+        const hr = hOf(jR);
+        const hl = hOf(jL);
+        if (hr < 1) {
+          face(pathFor(sides[1]), iu, iv, 1, hr, true);
+          if (wet(jR)) surf(iu, iv, true);
+        }
+        if (hl < 1) {
+          face(pathFor(sides[0]), iu, iv, 1, hl, false);
+          if (wet(jL)) surf(iu, iv, false);
+        }
+        if (farmland(c, r)) farm(c, r, 1, fieldPath);
+        if (beachy) {
+          const m = 0.2;
+          if (wet(index(iu, iv - 1))) turnedQuad(sand, iu, iv, iu + 1, iv + m, 1);
+          if (wet(jR)) turnedQuad(sand, iu + 1 - m, iv, iu + 1, iv + 1, 1);
+          if (wet(jL)) turnedQuad(sand, iu, iv + 1 - m, iu + 1, iv + 1, 1);
+          if (wet(index(iu - 1, iv))) turnedQuad(sand, iu, iv, iu + m, iv + 1, 1);
+        }
+        if (detail && TUFTED.has(b)) tuftsOn(c, r, 1, tufts);
       }
     }
     flush();
+    for (const [color, p] of fields) {
+      g.fillStyle = color;
+      g.fill(p);
+    }
+    g.fillStyle = P.sand;
+    g.fill(sand);
+    if (detail) strokeTufts(tufts);
+    g.strokeStyle = P.foam;
+    g.lineWidth = Math.max(1, s * 0.03);
+    g.lineCap = 'round';
+    g.stroke(foam);
 
     // Pass 3: everything that stands up (hills, mountains, ice, trees), back to front.
     const tree = (x, y, kind, size) => {
@@ -502,51 +643,40 @@
       g.fill();
     };
 
-    const peak = (iu, iv, h, snowy, rnd) => {
-      const cx = ox + ((iu - iv) / 2) * s;
-      const cy = oy + ((iu + iv) / 4 + 0.25) * s - h * L;
-      const inset = 0.84;
-      const hw = (s / 2) * inset;
-      const hh = (s / 4) * inset;
-      const apexX = cx + (rnd - 0.5) * s * 0.12;
-      const apexY = cy - s * (snowy ? 0.38 : 0.27) - rnd * s * 0.06;
-      const T = [cx, cy - hh];
-      const R = [cx + hw, cy];
-      const Bt = [cx, cy + hh];
-      const Lf = [cx - hw, cy];
-      const A = [apexX, apexY];
-      const tri = (p1, p2, color) => {
-        g.fillStyle = color;
-        g.beginPath();
-        g.moveTo(p1[0], p1[1]);
-        g.lineTo(p2[0], p2[1]);
-        g.lineTo(A[0], A[1]);
-        g.closePath();
-        g.fill();
-      };
-      tri(Lf, T, P.peak[3]);
-      tri(T, R, P.peak[2]);
-      tri(Lf, Bt, P.peak[0]);
-      tri(Bt, R, P.peak[1]);
-      if (snowy) {
-        const cap = (p) => [lerp(A[0], p[0], 0.45), lerp(A[1], p[1], 0.45)];
-        const cL = cap(Lf);
-        const cB = cap(Bt);
-        const cR = cap(R);
-        g.fillStyle = P.snow[0];
-        g.beginPath();
-        g.moveTo(A[0], A[1]);
-        g.lineTo(cL[0], cL[1]);
-        g.lineTo(cB[0], cB[1] - s * 0.03);
-        g.closePath();
-        g.fill();
-        g.fillStyle = P.snow[1];
-        g.beginPath();
-        g.moveTo(A[0], A[1]);
-        g.lineTo(cB[0], cB[1] - s * 0.03);
-        g.lineTo(cR[0], cR[1]);
-        g.closePath();
-        g.fill();
+    // One to three peaks per mountain tile, of different sizes, so ranges read as ridges.
+    const peaks = (c, r, h, snowy) => {
+      const count = 1 + Math.floor(hash2(c, r, 70) * 2.6);
+      const list = [];
+      for (let n = 0; n < count; n++) {
+        const spread = count > 1 ? 0.5 : 0.14;
+        const fx = 0.5 + (hash2(c, r, 71 + n) - 0.5) * spread;
+        const fy = 0.5 + (hash2(c, r, 81 + n) - 0.5) * spread;
+        const half = (count > 1 ? 0.25 : 0.4) * (0.8 + hash2(c, r, 91 + n) * 0.4);
+        const ph = (snowy ? 0.36 : 0.22) * (0.65 + hash2(c, r, 101 + n) * 0.75) * (count > 1 ? 0.85 : 1);
+        const [u, v] = rot(c + fx, r + fy, k);
+        list.push({ u, v, half, ph });
+      }
+      list.sort((p, q) => p.u + p.v - (q.u + q.v));
+      const capped = snowy || Math.abs(latOf(r)) > 42;
+      for (const { u, v, half, ph } of list) {
+        const T = isoPt(u - half, v - half, h);
+        const Rt = isoPt(u + half, v - half, h);
+        const Bt = isoPt(u + half, v + half, h);
+        const Lf = isoPt(u - half, v + half, h);
+        const base = isoPt(u, v, h);
+        const A = [base[0], base[1] - ph * s];
+        tri(g, Lf, T, A, P.peak[3]);
+        tri(g, T, Rt, A, P.peak[2]);
+        tri(g, Lf, Bt, A, P.peak[0]);
+        tri(g, Bt, Rt, A, P.peak[1]);
+        if (capped && ph > 0.2) {
+          const cap = (q) => [lerp(A[0], q[0], 0.42), lerp(A[1], q[1], 0.42)];
+          const cL = cap(Lf);
+          const cB = cap(Bt);
+          const cR = cap(Rt);
+          tri(g, A, cL, [cB[0], cB[1] - s * 0.025], P.snow[0]);
+          tri(g, A, [cB[0], cB[1] - s * 0.025], cR, P.snow[1]);
+        }
       }
     };
 
@@ -569,13 +699,57 @@
         const r = (i / cols) | 0;
         if (h >= 2) {
           const hv = hash2(c, r, 1);
-          const sides = P.side[material(b)];
+          const beachy = BEACHY.has(b) && Math.abs(latOf(r)) < 56 && hash2(c, r, 7) < 0.85;
+          const sides = beachy ? P.side.sand : P.side[material(b)];
           fill((p) => diamond(p, iu, iv, h), SW.top[b][hv < 0.33 ? 0 : hv < 0.66 ? 1 : 2]);
-          const hr = hOf(index(iu + 1, iv));
-          const hl = hOf(index(iu, iv + 1));
-          if (hr < h) fill((p) => face(p, iu, iv, h, hr, true), sides[1]);
-          if (hl < h) fill((p) => face(p, iu, iv, h, hl, false), sides[0]);
-          if (b === B.m || b === B.n) peak(iu, iv, h, b === B.n, hash2(c, r, 5));
+          const jR = index(iu + 1, iv);
+          const jL = index(iu, iv + 1);
+          const hr = hOf(jR);
+          const hl = hOf(jL);
+          if (hr < h) fill((p) => face(p, iu, iv, h, hr, true), wet(jR) ? sides[1] : P.side[material(b)][1]);
+          if (hl < h) fill((p) => face(p, iu, iv, h, hl, false), wet(jL) ? sides[0] : P.side[material(b)][0]);
+          if (beachy) {
+            const m = 0.2;
+            const strip = new Path2D();
+            if (wet(index(iu, iv - 1))) turnedQuad(strip, iu, iv, iu + 1, iv + m, h);
+            if (wet(jR)) turnedQuad(strip, iu + 1 - m, iv, iu + 1, iv + 1, h);
+            if (wet(jL)) turnedQuad(strip, iu, iv + 1 - m, iu + 1, iv + 1, h);
+            if (wet(index(iu - 1, iv))) turnedQuad(strip, iu, iv, iu + m, iv + 1, h);
+            g.fillStyle = P.sand;
+            g.fill(strip);
+          }
+          if (wet(jR) || wet(jL)) {
+            const x = ox + ((iu - iv) / 2) * s;
+            const y = oy + ((iu + iv) / 4) * s;
+            const d = s * 0.035;
+            g.strokeStyle = P.foam;
+            g.lineWidth = Math.max(1, s * 0.03);
+            g.lineCap = 'round';
+            g.beginPath();
+            if (wet(jR)) {
+              g.moveTo(x + s / 2, y + s / 4 + d);
+              g.lineTo(x, y + s / 2 + d);
+            }
+            if (wet(jL)) {
+              g.moveTo(x - s / 2, y + s / 4 + d);
+              g.lineTo(x, y + s / 2 + d);
+            }
+            g.stroke();
+          }
+          if (farmland(c, r)) {
+            const local = new Map();
+            farm(c, r, h, (color) => local.get(color) || local.set(color, new Path2D()).get(color));
+            for (const [color, p] of local) {
+              g.fillStyle = color;
+              g.fill(p);
+            }
+          }
+          if (detail && TUFTED.has(b)) {
+            const local = [new Path2D(), new Path2D()];
+            tuftsOn(c, r, h, local);
+            strokeTufts(local);
+          }
+          if (b === B.m || b === B.n) peaks(c, r, h, b === B.n);
         }
         const kind = b === B.f ? 'f' : b === B.j ? 'j' : b === B.t ? 't' : b === B.s ? 's' : '';
         if (kind) {
@@ -653,14 +827,27 @@
   function buildCache() {
     const [U, V] = dims();
     const s = BASE_TW;
-    const pad = 6;
+    const side = 44; // room for the board's shadow
+    const below = 90;
     const top = 1.6; // room above sea level for the highest peaks, in tile widths
     const cv = document.createElement('canvas');
-    cv.width = Math.ceil(((U + V) / 2) * s + pad * 2);
-    cv.height = Math.ceil(((U + V) / 4 + top + SLAB) * s + pad * 2);
+    cv.width = Math.ceil(((U + V) / 2) * s + side * 2);
+    cv.height = Math.ceil(((U + V) / 4 + top + SLAB) * s + 8 + below);
     const g = cv.getContext('2d');
-    const ox = pad + (V / 2) * s;
-    const oy = pad + top * s;
+    const ox = side + (V / 2) * s;
+    const oy = 8 + top * s;
+    // The board floats a little above the page: a soft shadow under its silhouette.
+    const pt = (u, v, d) => [ox + ((u - v) / 2) * s, oy + ((u + v) / 4 + d) * s];
+    g.save();
+    g.shadowColor = palette().boardShadow;
+    g.shadowBlur = 36;
+    g.shadowOffsetY = 30;
+    g.fillStyle = palette().slab[3];
+    g.beginPath();
+    [pt(0, 0, 0), pt(U, 0, 0), pt(U, 0, SLAB), pt(U, V, SLAB), pt(0, V, SLAB), pt(0, V, 0)].forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.closePath();
+    g.fill();
+    g.restore();
     drawSlab(g, s, ox, oy);
     drawTerrain(g, s, ox, oy, 0, U, 0, V);
     state.cache = { canvas: cv, ox, oy, s };
@@ -1366,7 +1553,8 @@
     sprinkle((style.trees || 0) + (spec.trees || 0), style.conifers ? 't' : 'f');
     sprinkle(style.palms || 0, 'palm');
     scaleScene(items, RANK_SCALE[pl.rank]);
-    return { items, landmark: spec.landmark || '' };
+    const streets = spec.style === 'woods' || pl.scope !== 'city' ? 'none' : spec.style === 'canal' ? 'pave' : 'grid';
+    return { items, landmark: spec.landmark || '', streets, k: RANK_SCALE[pl.rank] };
   }
 
   // Shrinks a whole little city (footprint, heights and landmark) for smaller places.
@@ -2114,12 +2302,74 @@
     });
     order.sort((a, b) => a.d - b.d || a.i - b.i);
     let top = Infinity;
-    const R = { g, S, tw, P: palette(), lift, pl, detail: tw >= 18, mark: (y) => { if (y < top) top = y; } };
+    const P = palette();
+    const R = { g, S, tw, P, lift, pl, detail: tw >= 18, mark: (y) => { if (y < top) top = y; } };
     g.save();
     if (!active) g.globalAlpha = 0.5;
-    for (const { it } of order) DRAW[it.t](R, it);
+    if (scene.streets !== 'none') cityGround(g, S, scene, P, tw);
+    let shaded = false;
+    for (const { it } of order) {
+      if (!shaded && !it.flat) {
+        shaded = true;
+        if (tw >= 13) castShadows(g, pl, lift, scene.items, P);
+      }
+      DRAW[it.t](R, it);
+    }
     g.restore();
     return top;
+  }
+
+  // Pavement under the city and, closer in, a grid of streets between the building plots.
+  function cityGround(g, S, scene, P, tw) {
+    const k = scene.k;
+    const e = 0.45 * k;
+    poly(g, [S(-e, -e, 0), S(e, -e, 0), S(e, e, 0), S(-e, e, 0)], P.pave);
+    if (scene.streets !== 'grid' || tw < 22) return;
+    const half = 0.016 * k;
+    const road = new Path2D();
+    const strip = (x0, y0, x1, y1) => {
+      const pts = [S(x0, y0, 0), S(x1, y0, 0), S(x1, y1, 0), S(x0, y1, 0)];
+      road.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < 4; i++) road.lineTo(pts[i][0], pts[i][1]);
+      road.closePath();
+    };
+    for (const t of [-0.24, -0.08, 0.08, 0.24]) {
+      strip(t * k - half, -e, t * k + half, e);
+      strip(-e, t * k - half, e, t * k + half);
+    }
+    g.fillStyle = P.road;
+    g.fill(road);
+  }
+
+  // Shadows fall away from the light (towards the bottom right of the screen) on the ground.
+  function castShadows(g, pl, lift, items, P) {
+    const path = new Path2D();
+    const P3 = (u, v) => isoToScreen((u - v) / 2, (u + v) / 4 - lift);
+    for (const it of items) {
+      const o = it.o;
+      if ((o.z || 0) > 0.02) continue;
+      let hx;
+      let hy;
+      if (it.t === 'box' || it.t === 'pyr') {
+        hx = o.w / 2;
+        hy = o.d / 2;
+      } else if (it.t === 'cyl' || it.t === 'cone') {
+        hx = o.r;
+        hy = o.r;
+      } else continue;
+      const [u0, v0] = rot(pl.x + it.dx - hx, pl.y + it.dy - hy);
+      const [u1, v1] = rot(pl.x + it.dx + hx, pl.y + it.dy + hy);
+      const uA = Math.min(u0, u1);
+      const vA = Math.min(v0, v1);
+      const vB = Math.max(v0, v1);
+      const uB = Math.max(u0, u1) + o.h * (it.t === 'pyr' || it.t === 'cone' ? 0.35 : 0.55);
+      const pts = [P3(uA, vA), P3(uB, vA), P3(uB, vB), P3(uA, vB)];
+      path.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < 4; i++) path.lineTo(pts[i][0], pts[i][1]);
+      path.closePath();
+    }
+    g.fillStyle = P.bshadow;
+    g.fill(path);
   }
 
   function poly(g, pts, color) {
@@ -2294,6 +2544,82 @@
     }
   }
 
+  // ------------------------------------------------------------------ clouds
+  // A few puffy clouds float over the board when zoomed out, and drift slowly east.
+  let clouds = null;
+  function buildClouds() {
+    const rnd = seeded('clouds');
+    const { cols, rows } = state.world;
+    clouds = Array.from({ length: 22 }, () => {
+      const size = 2.4 + rnd() * 3;
+      const puffs = Array.from({ length: 4 + Math.floor(rnd() * 4) }, () => ({
+        dx: (rnd() - 0.5) * size * 1.7,
+        dy: (rnd() - 0.5) * size * 0.9,
+        r: size * (0.34 + rnd() * 0.32),
+      }));
+      return { x: rnd() * cols, y: 6 + rnd() * (rows - 12), z: 2.6 + rnd() * 0.9, speed: 0.12 + rnd() * 0.18, puffs };
+    });
+  }
+
+  const cloudFade = () => clamp((26 - state.cam.tw) / 14, 0, 1);
+
+  function drawClouds(g, now) {
+    const fade = cloudFade();
+    if (fade <= 0 || !state.world) return false;
+    if (!clouds) buildClouds();
+    const P = palette();
+    const { cols } = state.world;
+    const tw = state.cam.tw;
+    const t = motionQuery.matches ? 0 : now / 1000;
+    const placed = clouds.map((cl) => {
+      const x = (((cl.x + t * cl.speed) % cols) + cols) % cols;
+      const [X, Y] = toIso(x, cl.y, LEVEL);
+      return { cl, x, depth: Y };
+    });
+    placed.sort((a, b) => a.depth - b.depth);
+    const puffAt = (cl, x, p, lift) => isoToScreen(...toIso(x + p.dx, cl.y + p.dy, lift));
+    g.save();
+    if (P.cloud.shadow) {
+      // Shadows land on the ground, pushed away from the light.
+      g.globalAlpha = fade;
+      g.fillStyle = P.cloud.shadow;
+      g.beginPath();
+      for (const { cl, x } of placed) {
+        const shift = cl.z * 0.8 * tw;
+        for (const p of cl.puffs) {
+          const [sx, sy] = puffAt(cl, x, p, LEVEL);
+          const rx = p.r * tw * 0.6;
+          g.moveTo(sx + shift * 0.5 + rx, sy + shift * 0.25);
+          g.ellipse(sx + shift * 0.5, sy + shift * 0.25, rx, rx * 0.5, 0, 0, Math.PI * 2);
+        }
+      }
+      g.fill();
+    }
+    g.globalAlpha = fade * P.cloud.alpha;
+    for (const { cl, x } of placed) {
+      const pts = cl.puffs.map((p) => {
+        const [sx, sy] = puffAt(cl, x, p, LEVEL);
+        return [sx, sy - cl.z * tw, p.r * tw * 0.6];
+      });
+      g.fillStyle = P.cloud.under;
+      g.beginPath();
+      for (const [x0, y0, r] of pts) {
+        g.moveTo(x0 + r, y0 + r * 0.22);
+        g.arc(x0, y0 + r * 0.22, r, 0, Math.PI * 2);
+      }
+      g.fill();
+      g.fillStyle = P.cloud.body;
+      g.beginPath();
+      for (const [x0, y0, r] of pts) {
+        g.moveTo(x0 + r * 0.92, y0);
+        g.arc(x0, y0, r * 0.92, 0, Math.PI * 2);
+      }
+      g.fill();
+    }
+    g.restore();
+    return true;
+  }
+
   // ------------------------------------------------------------------ frame
   function visibleCells() {
     const [U, V] = dims();
@@ -2347,6 +2673,7 @@
       }
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    state.cloudsShown = drawClouds(ctx, performance.now());
     drawPlaces(ctx);
     updateOverlays();
   }
@@ -2363,6 +2690,12 @@
     }
     render();
     if (state.anim) requestRender();
+    else if (state.cloudsShown && !motionQuery.matches && !document.hidden && !state.cloudTimer) {
+      state.cloudTimer = setTimeout(() => {
+        state.cloudTimer = 0;
+        requestRender();
+      }, 90);
+    }
   }
 
   // ------------------------------------------------------------------ overlays that follow the map

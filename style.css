@@ -133,12 +133,19 @@ button { font: inherit; color: inherit; }
   pointer-events: none;
 }
 .brand h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
   font: 400 var(--step-3) / 0.9 var(--font-display);
   letter-spacing: 0.01em;
   color: var(--ink);
   text-shadow: 0 1px 0 var(--sky), 0 0 18px var(--sky);
 }
+.brand .logo { width: 0.82em; height: 0.82em; flex: none; filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.18)); }
+.brand .logo .l-top { fill: color-mix(in srgb, var(--accent) 68%, #fff); }
+.brand .logo .l-left { fill: var(--accent); }
+.brand .logo .l-right { fill: color-mix(in srgb, var(--accent) 72%, #000); }
 .brand .tagline {
   margin: 6px 0 0;
   color: var(--ink-2);
@@ -164,6 +171,7 @@ button { font: inherit; color: inherit; }
 .search { position: relative; width: 300px; }
 .search > svg {
   position: absolute;
+  z-index: 1;
   left: 12px;
   top: 21px;
   width: 17px;
@@ -181,7 +189,9 @@ button { font: inherit; color: inherit; }
   padding: 0 12px 0 38px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 84%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(10px) saturate(1.2);
   color: var(--ink);
   font: inherit;
   box-shadow: var(--shadow);
@@ -228,7 +238,9 @@ button { font: inherit; color: inherit; }
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 84%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(10px) saturate(1.2);
   box-shadow: var(--shadow);
   cursor: pointer;
   white-space: nowrap;
@@ -464,7 +476,9 @@ button { font: inherit; color: inherit; }
   align-items: center;
   gap: 4px;
   padding: 4px;
-  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 84%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(10px) saturate(1.2);
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: var(--shadow);
