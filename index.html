@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Isometric World</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Every isometric city map we could find, from Isometric NYC to tiny.london and Tiny SP, placed on one isometric Earth.">
+<link rel="canonical" href="https://isometric.earth/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Isometric World">
+<meta property="og:title" content="Isometric World">
+<meta property="og:description" content="Every isometric city map we could find, from Isometric NYC to tiny.london and Tiny SP, placed on one isometric Earth.">
+<meta property="og:url" content="https://isometric.earth/">
+<meta property="og:image" content="https://isometric.earth/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="An isometric world map with labels on cities that have isometric maps">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://isometric.earth/og.jpg">
+<meta name="theme-color" content="#d3e2e8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#08111b" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&family=Jersey+10&display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<main class="stage" id="stage">
+  <canvas id="world" tabindex="0" aria-label="Isometric map of the Earth with a little city for every place that has an isometric map. Drag to pan, scroll or pinch to zoom, press Q or E to turn the world. The Places list has the same content."></canvas>
+  <div class="ring" id="ring" hidden></div>
+  <div class="tooltip" id="tooltip" role="status" hidden></div>
+
+  <header class="brand">
+    <h1>Isometric World</h1>
+    <p class="tagline">Every isometric city map we could find, on one isometric Earth.</p>
+    <p class="stats" id="stats">Loading maps…</p>
+  </header>
+
+  <div class="topbar">
+    <div class="search" id="search-box">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4.5 4.5"/></svg>
+      <input type="search" id="search" role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list" aria-label="Search places, maps and makers" placeholder="Search a city, map or maker" autocomplete="off" spellcheck="false">
+      <ul class="results" id="results" role="listbox" aria-label="Search results" hidden></ul>
+    </div>
+    <button type="button" class="places-button" id="open-places" aria-expanded="false" aria-controls="places-pop">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5h10M7 10h10M7 15h10"/><circle cx="3.5" cy="5" r="1"/><circle cx="3.5" cy="10" r="1"/><circle cx="3.5" cy="15" r="1"/></svg>
+      <span class="label">Places</span>
+      <span class="count" id="places-count"></span>
+    </button>
+  </div>
+
+  <section class="pop places-pop" id="places-pop" aria-labelledby="list-title" hidden>
+    <div class="pop-head">
+      <h2 id="list-title" tabindex="-1">Places</h2>
+      <label class="sort">
+        <span>Sort</span>
+        <select id="sort">
+          <option value="count">Most maps</option>
+          <option value="name">A to Z</option>
+          <option value="new">Newest</option>
+        </select>
+      </label>
+      <button type="button" class="close" id="close-places" aria-label="Close the list of places"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
+    </div>
+    <div class="filters" id="filters" role="group" aria-label="Show maps made in this way"></div>
+    <ol class="places" id="places"></ol>
+    <p class="empty" id="empty" hidden></p>
+    <footer class="pop-foot">
+      <button type="button" class="link-button" id="open-about">About and adding a map</button>
+      <a href="data/projects.json" target="_blank" rel="noopener">Data (JSON)</a>
+      <span class="updated" id="updated"></span>
+    </footer>
+  </section>
+
+  <article class="pop place-pop" id="place-pop" aria-labelledby="place-title" hidden>
+    <div class="grab" id="grab" aria-hidden="true"></div>
+    <button type="button" class="close" id="close-place" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
+    <div class="place-body" id="place-detail"></div>
+    <span class="notch" aria-hidden="true"></span>
+  </article>
+
+  <div class="controls" id="controls" role="toolbar" aria-label="Map controls">
+    <button type="button" id="zoom-in" title="Zoom in (+)" aria-label="Zoom in"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg></button>
+    <button type="button" id="zoom-out" title="Zoom out (−)" aria-label="Zoom out"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12"/></svg></button>
+    <span class="sep" aria-hidden="true"></span>
+    <button type="button" id="turn-left" title="Turn the world left (Q)" aria-label="Turn the world left"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5H4v-3M4.5 5.2A7 7 0 1 1 3.2 12"/></svg></button>
+    <button type="button" id="turn-right" title="Turn the world right (E)" aria-label="Turn the world right"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M13 5h3v-3M15.5 5.2A7 7 0 1 0 16.8 12"/></svg></button>
+    <span class="sep" aria-hidden="true"></span>
+    <button type="button" id="home" title="Show the whole world (0)" aria-label="Show the whole world"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 17.5 6.5 10 10.5 2.5 6.5Z"/><path d="M2.5 10.5 10 14.5l7.5-4M2.5 14 10 18l7.5-4"/></svg></button>
+    <button type="button" id="surprise" title="Fly to a random place (R)" aria-label="Fly to a random place"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 17 6.5v7L10 17.5 3 13.5v-7Z"/><path d="M3 6.5 10 10.5l7-4M10 10.5v7"/><circle cx="10" cy="6.4" r=".9"/><circle cx="6.2" cy="11" r=".9"/><circle cx="13.8" cy="12.4" r=".9"/></svg></button>
+    <button type="button" id="about-button" title="About Isometric World" aria-label="About Isometric World"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5"/><circle cx="10" cy="6.2" r=".9"/></svg></button>
+    <span class="compass" id="compass" title="Direction of north" aria-hidden="true"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="2.2" class="hub"/><g id="compass-needle"><path d="M18 22V10"/><path d="M14.4 13.4 18 9.4 21.6 13.4"/></g></svg><b id="compass-n">N</b></span>
+  </div>
+
+  <p class="coords" id="coords" aria-hidden="true"></p>
+  <p class="loading" id="loading">Building the world…</p>
+</main>
+
+<dialog class="about-dialog" id="about" aria-labelledby="about-title">
+  <form method="dialog" class="about-close"><button type="submit" aria-label="Close">×</button></form>
+  <h2 id="about-title">About Isometric World</h2>
+  <p>In January 2026, Andy Coenen released <a href="https://isometric.nyc/" target="_blank" rel="noopener">Isometric NYC</a>: all of New York in SimCity 2000-style pixel art, redrawn tile by tile by an image model. People around the world have since made maps of their own cities, by AI, by code and by hand. This page puts all the ones we could find on a single isometric Earth.</p>
+  <h3>Reading the map</h3>
+  <ul>
+    <li>Each little city is a place with at least one isometric map. Its landmark and its buildings hint at the real city, and its skyline grows with the number of maps.</li>
+    <li>Click a city to see its maps. Drag to pan, scroll or pinch to zoom, and use the turn buttons (or <kbd>Q</kbd> and <kbd>E</kbd>) to rotate the world a quarter turn, the way city builders do.</li>
+    <li>The colours show how each map was made: <span class="tech tech-ai">AI-painted</span> <span class="tech tech-data">Drawn from data</span> <span class="tech tech-3d">3D diorama</span> <span class="tech tech-classic">Classic</span></li>
+  </ul>
+  <h3>Add a map</h3>
+  <p>Know one that is missing? Every entry is one object in <a href="https://github.com/diocosta/isometric-world/blob/main/data/projects.json" target="_blank" rel="noopener">data/projects.json</a> in the <a href="https://github.com/diocosta/isometric-world" target="_blank" rel="noopener">diocosta/isometric-world</a> repository. Open a pull request with yours, or <a href="https://github.com/diocosta/isometric-world/issues/new" target="_blank" rel="noopener">open an issue</a> with the link, the city and who made it.</p>
+  <h3>Other atlases</h3>
+  <ul id="atlases"></ul>
+  <h3>Credits</h3>
+  <p>Every map belongs to the people who made it; this page only links to them. Terrain from <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> (public domain). The list was checked by hand on <span id="about-updated">7 November 2026</span>.</p>
+</dialog>
+</body>
+</html>
