@@ -2,7 +2,7 @@
 
 **Live at [isometric.earth](https://isometric.earth)**
 
-An isometric Earth with a little city for every isometric city map we could find: Isometric NYC, tiny.london, Tiny SP, Isometric Istanbul and about eighty more. Each little city has its own landmark (the Eiffel Tower, the CN Tower, Christ the Redeemer, the Golden Gate Bridge…) and buildings in a local style. Click one and a card pops up with every map of that place, who made it and how.
+An isometric Earth with a little city for every isometric city map we could find: Isometric NYC, tiny.london, Tiny SP, Isometric Istanbul and over a hundred more. Each little city has its own landmark (the Eiffel Tower, the CN Tower, Christ the Redeemer, the Golden Gate Bridge…) and buildings in a local style. Click one and a card pops up with every map of that place, who made it and how.
 
 ![The isometric world with pins on every place that has an isometric map](screenshot.jpg)
 
@@ -79,7 +79,7 @@ Places can also be added by [opening an issue](https://github.com/diocosta/isome
 
 - **Terrain.** [`tools/build-world.mjs`](tools/build-world.mjs) turns [Natural Earth](https://www.naturalearthdata.com/) vectors (public domain) into [`data/world.json`](data/world.json): a 1° grid from 78°N to 56°S where each cell has a biome and a height. Coastlines, lakes, glaciers, deserts, mountain ranges and plateaus come from the data; forests, steppe and savanna are painted with broad climate bands and a little noise. Run `node tools/build-world.mjs` to regenerate it (no dependencies; the source files are cached in `tools/.cache/`).
 - **Rendering.** [`app.js`](app.js) draws the grid as isometric tiles on a `<canvas>`. Zoomed out, it reuses one pre-drawn picture of the whole world; zoomed in, it draws the visible tiles live.
-- **Little cities.** Each place is built from a handful of isometric solids (boxes, cylinders, cones, domes, rings, bridges, statues) described in the `CITY` table in `app.js`: one entry per place, with a rank, a building style (Paris slate roofs, Amsterdam canal houses, glass towers, colourful Tirana…) and a landmark. A place without an entry still gets a style and a generic landmark, so adding a map never requires drawing one.
+- **Little cities.** Each place is built from a handful of isometric solids (boxes, cylinders, cones, domes, rings, bridges, statues) described in the `CITY` table in `app.js`: one entry per place, with a rank, a building style (Paris slate roofs, Amsterdam canal houses, glass towers, colourful Tirana…) and a landmark. A place without an entry still gets a style and a generic landmark, so adding a map never requires drawing one. Each place has a 1° tile to itself; when two fall in the same tile (Brussels and Leuven), the smaller one moves to the nearest free tile.
 - **Hierarchy.** Like an atlas, places have a rank from 1 (megacities such as New York, São Paulo or Mumbai) to 4 (towns such as Orindiúva). Rank sets the size of a place's little city, pin, night glow and label, and decides which label wins when two collide. Smaller places get their labels as you zoom in, and try a spot beside their pin before giving way. Places with three or more maps are promoted one step. New places default to rank 3; set `rank` in their `CITY` entry to change it.
 - **Themes.** The page follows the system light or dark setting. In the dark, the cities glow and their windows light up.
 

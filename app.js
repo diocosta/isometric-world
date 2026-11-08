@@ -160,7 +160,11 @@
   // ------------------------------------------------------------------ helpers
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
-  const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  // Text for matching: lowercase, no accents and no punctuation, so "bielsko biala" finds Bielsko-Biała.
+  // Letters such as ł have no accent to strip and are swapped by hand.
+  const LETTERS = { ł: 'l', ø: 'o', đ: 'd', ı: 'i', ß: 'ss', æ: 'ae', œ: 'oe' };
+  const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[łøđıßæœ]/g, (ch) => LETTERS[ch]).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   const slug = (s) => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
   const palette = () => PALETTES[state.theme];
@@ -291,19 +295,42 @@
       pl.id = id;
       pl.lat = pl.projects.reduce((a, p) => a + p.lat, 0) / pl.projects.length;
       pl.lon = pl.projects.reduce((a, p) => a + p.lon, 0) / pl.projects.length;
-      pl.c = clamp(Math.floor(pl.lon - w.lon0), 0, w.cols - 1);
-      pl.r = clamp(Math.floor(w.lat0 - pl.lat), 0, w.rows - 1);
-      pl.cell = pl.r * w.cols + pl.c;
-      pl.x = pl.c + 0.5; // the little city sits in the middle of its 1° tile
-      pl.y = pl.r + 0.5;
       pl.projects.sort((a, b) => (a.launched || '9999').localeCompare(b.launched || '9999') || a.name.localeCompare(b.name));
       pl.newest = pl.projects.reduce((a, p) => ((p.launched || '') > a ? p.launched : a), '');
       pl.rank = CITY[id]?.rank ?? 3;
       pl.hay = pl.projects.map((p) => norm(`${pl.name} ${pl.country} ${p.name} ${p.by || ''} ${hostOf(p.url)} ${(p.tags || []).join(' ')}`));
+      places.push(pl);
+    }
+    // Each place gets a 1° tile of its own. When two fall in the same tile (Brussels and Leuven),
+    // the bigger one keeps it and the other moves to the free neighbour nearest to where it really is.
+    const taken = new Set();
+    const byImportance = [...places].sort((a, b) => a.rank - b.rank || b.projects.length - a.projects.length || a.name.localeCompare(b.name));
+    for (const pl of byImportance) {
+      const fx = pl.lon - w.lon0;
+      const fy = w.lat0 - pl.lat;
+      let best = null;
+      for (let ring = 0; ring <= 3 && !best; ring++) {
+        for (let dr = -ring; dr <= ring; dr++) {
+          for (let dc = -ring; dc <= ring; dc++) {
+            if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
+            const r = clamp(Math.floor(fy) + dr, 0, w.rows - 1);
+            const c = clamp(Math.floor(fx) + dc, 0, w.cols - 1);
+            const cell = r * w.cols + c;
+            if (taken.has(cell)) continue;
+            const cost = Math.hypot(c + 0.5 - fx, r + 0.5 - fy) + (w.biome[cell] === B['~'] ? 1 : 0);
+            if (!best || cost < best.cost) best = { r, c, cell, cost };
+          }
+        }
+      }
+      taken.add(best.cell);
+      pl.r = best.r;
+      pl.c = best.c;
+      pl.cell = best.cell;
+      pl.x = pl.c + 0.5; // the little city sits in the middle of its tile
+      pl.y = pl.r + 0.5;
       // City ground: paved, flat and never under water.
       w.biome[pl.cell] = B.c;
       w.height[pl.cell] = clamp(w.height[pl.cell], 1, 2);
-      places.push(pl);
     }
     return places;
   }
@@ -887,6 +914,7 @@
     sprawl: { walls: ['#f1e6d2', '#e7d3b5', '#dfe6ea', '#f4efe6'], min: 0.04, max: 0.08, n: 15, a: 0.06, palms: 6 },
     woods: { walls: ['#a7744f', '#8f6748'], roofs: ['#5b4b3f'], min: 0.04, max: 0.05, n: 3, a: 0.04, trees: 18, conifers: true },
     lowmodern: { walls: ['#e9e4da', '#d8d3c8', '#c9d4db'], min: 0.05, max: 0.11, n: 9, a: 0.066, trees: 6 },
+    adobe: { walls: ['#d9b48a', '#cfa57a', '#e2c39d', '#c69a6e', '#e8d2b0'], min: 0.04, max: 0.09, n: 13, a: 0.064 },
   };
 
   // Records the parts of a city; drawScene() replays them for the current rotation and zoom.
@@ -932,6 +960,7 @@
       figure(dx, dy, z, h, color, kind = 'statue') { push('figure', dx, dy, { z, h, color, kind }); },
       balloon(dx, dy, z, r, color) { push('balloon', dx, dy, { z, r, color }); },
       gem(dx, dy, s, o = {}) { push('gem', dx, dy, { s, ...o }); blockR(dx, dy, s); },
+      sail(dx, dy, w, h, o = {}) { push('sail', dx, dy, { w, h, ...o }); blockR(dx, dy, w / 2 + 0.02); },
       plane(dx, dy, z) { push('plane', dx, dy, { z }); },
       cow(dx, dy) { push('cow', dx, dy, {}); blockR(dx, dy, 0.03); },
       light(dx, dy, z) { items.push({ t: 'light', dx, dy, o: { z }, at: [dx, dy], last: true }); },
@@ -1014,6 +1043,53 @@
 
   function palms(K, spots) {
     for (const [x, y] of spots) K.tree(x, y, 'palm', 1);
+  }
+
+  // A Dutch mill: a round body, a thatched cap and four sails turning in the north-south plane.
+  function windmill(K, dx, dy, o = {}) {
+    const h = o.h || 0.2;
+    const r = o.r || 0.032;
+    K.group(dx, dy, () => {
+      K.cyl(dx, dy, r, h, { color: o.color || '#5e4d42' });
+      K.cone(dx, dy, r * 1.2, h * 0.38, { z: h, color: o.cap || '#8a7b5c' });
+      const hx = dx + r * 1.25;
+      const hz = h * 1.08;
+      const len = h * 0.78;
+      for (let i = 0; i < 4; i++) {
+        const a = (o.turn ?? 0.5) + (i * Math.PI) / 2;
+        K.line([[hx, dy, hz], [hx, dy + Math.cos(a) * len, hz + Math.sin(a) * len]], { color: '#efe9dc', w: 2.2 });
+      }
+    });
+  }
+
+  // The Atomium: nine spheres on the corners and centre of a cube standing on one corner.
+  function atomium(K, dx, dy, o = {}) {
+    const a = o.a || 0.2;
+    const z0 = o.z || 0.05;
+    const r = o.r || 0.03;
+    const rho = a * Math.sqrt(2 / 3);
+    const ring = (k, h, turn) => [0, 1, 2].map((i) => {
+      const t = turn + (i * 2 * Math.PI) / 3;
+      return [dx + Math.cos(t) * rho * k, dy + Math.sin(t) * rho * k, h];
+    });
+    const bottom = [dx, dy, z0];
+    const top = [dx, dy, z0 + a * Math.sqrt(3)];
+    const mid = [dx, dy, z0 + (a * Math.sqrt(3)) / 2];
+    const low = ring(1, z0 + a / Math.sqrt(3), Math.PI / 6);
+    const high = ring(1, z0 + (2 * a) / Math.sqrt(3), Math.PI / 6 + Math.PI / 3);
+    const tube = { color: '#b9c2c9', w: 2.4 };
+    K.group(dx, dy, () => {
+      for (const p of low) K.line([[p[0], p[1], 0], p], { color: '#9aa4ab', w: 2 });
+      const edges = [];
+      low.forEach((p, i) => {
+        edges.push([bottom, p], [p, high[i]], [p, high[(i + 2) % 3]]);
+      });
+      high.forEach((p) => edges.push([top, p]));
+      for (const p of [bottom, top, ...low, ...high]) edges.push([mid, p]);
+      for (const [p, q] of edges) K.line([p, q], tube);
+      const balls = [bottom, ...low, mid, ...high, top].sort((p, q) => p[0] + p[1] - (q[0] + q[1]) || p[2] - q[2]);
+      for (const [x, y, z] of balls) K.sphere(x, y, r, { z, color: '#d5dce1' });
+    });
   }
 
   const WATER = 'water';
@@ -1489,6 +1565,223 @@
         K.box(0.2, 0.05, 0.07, 0.07, 0.68, { color: '#c9a68e', windows: true });
         K.pyr(0.2, 0.05, 0.07, 0.07, 0.08, { z: 0.68, color: '#a64b3a' });
       });
+    } },
+    madrid: { rank: 2, style: 'oldtown', landmark: 'the Metrópolis building on Gran Vía and the Puerta de Alcalá', mark(K) {
+      K.flat(0.25, 0.22, 0.34, 0.32, PARK);
+      K.group(-0.08, -0.08, () => {
+        K.cyl(-0.08, -0.08, 0.075, 0.26, { color: '#f1e9d8' });
+        K.cyl(-0.08, -0.08, 0.062, 0.05, { z: 0.26, color: '#ece2cc' });
+        K.dome(-0.08, -0.08, 0.062, { z: 0.31, color: '#2f3640' });
+        K.figure(-0.08, -0.08, 0.31 + domeTop(0.062), 0.1, '#d9b44a', 'angel');
+      });
+      K.group(0.0, 0.24, () => {
+        K.box(0.0, 0.24, 0.05, 0.22, 0.11, { color: '#e3d4b4', arches: 3 });
+        K.box(0.0, 0.24, 0.05, 0.08, 0.04, { z: 0.11, color: '#e3d4b4' });
+      });
+    } },
+    lyon: { rank: 2, style: 'oldtown', landmark: 'the Fourvière basilica on its hill, the two rivers and the Crayon tower', mark(K) {
+      K.flat(-0.12, 0, 0.06, 0.9, WATER);
+      K.flat(0.15, 0, 0.08, 0.9, WATER);
+      K.group(-0.3, -0.12, () => {
+        K.hill(-0.3, -0.12, 0.15, 0.15, { color: '#5f9654', flat: true });
+        K.box(-0.3, -0.12, 0.13, 0.07, 0.08, { z: 0.15, color: '#f1ece2' });
+        for (const [x, y] of [[-0.355, -0.145], [-0.245, -0.145], [-0.355, -0.095], [-0.245, -0.095]]) K.box(x, y, 0.028, 0.028, 0.12, { z: 0.15, color: '#f1ece2' });
+        K.figure(-0.3, -0.12, 0.23, 0.05, '#d9b44a', 'statue');
+      });
+      K.group(0.3, -0.08, () => {
+        K.cyl(0.3, -0.08, 0.045, 0.6, { color: '#c98a6a' });
+        K.cone(0.3, -0.08, 0.045, 0.12, { z: 0.6, color: '#a7654b' });
+      });
+    } },
+    geneva: { rank: 3, style: 'paris', landmark: 'the Jet d’Eau on Lake Geneva', mark(K) {
+      K.flat(0.12, 0.18, 0.66, 0.54, WATER);
+      K.group(0.2, 0.2, () => {
+        K.line([[0.2, 0.2, 0], [0.2, 0.2, 0.66]], { color: '#ffffff', w: 3 });
+        K.line([[0.2, 0.2, 0.66], [0.215, 0.215, 0.5]], { color: '#e3f1f8', w: 2.6 });
+      });
+      K.group(-0.24, -0.18, () => {
+        K.box(-0.22, -0.16, 0.16, 0.08, 0.1, { color: '#cfc3ad', roof: '#6a6f72', roofH: 0.05 });
+        K.box(-0.28, -0.2, 0.045, 0.045, 0.18, { color: '#cfc3ad' });
+        K.cone(-0.2, -0.16, 0.02, 0.17, { z: 0.11, color: '#4f7f6f' });
+      });
+    } },
+    brussels: { rank: 2, style: 'oldtown', landmark: 'the Atomium and the town hall on the Grand-Place', mark(K) {
+      atomium(K, 0.16, -0.16, { a: 0.2, r: 0.032, z: 0.05 });
+      K.flat(-0.14, 0.18, 0.26, 0.2, PLAZA);
+      K.group(-0.2, 0.12, () => {
+        K.box(-0.2, 0.14, 0.2, 0.07, 0.12, { color: '#d8c7a0', roof: '#55524f', roofH: 0.06 });
+        K.box(-0.2, 0.1, 0.045, 0.045, 0.26, { color: '#d8c7a0' });
+        K.cone(-0.2, 0.1, 0.027, 0.22, { z: 0.26, color: '#9c8f72' });
+        K.figure(-0.2, 0.1, 0.48, 0.05, '#d9b44a', 'statue');
+      });
+    } },
+    kinderdijk: { rank: 4, style: 'smalltown', landmark: 'nineteen windmills along the polder canals', mark(K) {
+      K.flat(-0.1, 0, 0.7, 0.9, PARK);
+      K.flat(0, -0.1, 0.9, 0.05, WATER);
+      K.flat(0, 0.16, 0.9, 0.05, WATER);
+      for (const [x, y] of [[-0.34, -0.17], [-0.16, -0.17], [0.02, -0.17], [-0.26, 0.09], [-0.08, 0.09], [0.1, 0.09]]) windmill(K, x, y, { h: 0.22 });
+    } },
+    krakow: { rank: 3, style: 'oldtown', landmark: 'St. Mary’s Basilica, the Cloth Hall and Wawel Castle', mark(K) {
+      K.flat(0.02, -0.04, 0.34, 0.34, PLAZA);
+      K.box(0.0, -0.02, 0.07, 0.24, 0.06, { color: '#e9dcc0', roof: '#b4573a', roofH: 0.03, arches: 4 });
+      K.group(0.14, -0.16, () => {
+        K.box(0.15, -0.12, 0.06, 0.14, 0.12, { color: '#b8644b', roof: '#5b5450', roofH: 0.05 });
+        K.box(0.12, -0.2, 0.04, 0.04, 0.32, { color: '#b8644b' });
+        K.cone(0.12, -0.2, 0.026, 0.15, { z: 0.32, color: '#4f7f6f' });
+        K.box(0.175, -0.2, 0.035, 0.035, 0.25, { color: '#b8644b' });
+        K.dome(0.175, -0.2, 0.02, { z: 0.25, color: '#4f7f6f' });
+      });
+      K.flat(-0.33, 0.2, 0.1, 0.6, WATER);
+      K.group(-0.2, 0.28, () => {
+        K.hill(-0.2, 0.28, 0.13, 0.08, { color: '#6c9a55', flat: true });
+        K.box(-0.2, 0.28, 0.14, 0.08, 0.06, { z: 0.08, color: '#efe2c4', roof: '#b4573a', roofH: 0.04 });
+        K.dome(-0.15, 0.24, 0.026, { z: 0.14, color: '#e3b341' });
+      });
+    } },
+    'bielsko-biala': { rank: 3, style: 'oldtown', landmark: 'the town hall tower below the Beskid mountains', mark(K) {
+      K.hill(-0.26, -0.28, 0.2, 0.22, { color: '#4f7f4f' });
+      K.hill(0.02, -0.36, 0.15, 0.15, { color: '#5b8a55' });
+      K.group(0.08, 0.06, () => {
+        K.box(0.1, 0.08, 0.18, 0.1, 0.1, { color: '#efe0c2', roof: '#b4573a', roofH: 0.05 });
+        K.box(0.04, 0.04, 0.05, 0.05, 0.28, { color: '#efe0c2' });
+        K.pyr(0.04, 0.04, 0.055, 0.055, 0.1, { z: 0.28, color: '#4f7f6f' });
+      });
+    } },
+    casablanca: { rank: 2, style: 'whitemed', landmark: 'the Hassan II Mosque and its minaret on the Atlantic', mark(K) {
+      K.flat(0, -0.37, 0.9, 0.12, WATER);
+      K.box(0.04, -0.2, 0.22, 0.12, 0.07, { color: '#efe6d3', roof: '#3f8a6e', roofH: 0.03 });
+      K.group(-0.17, -0.24, () => {
+        K.box(-0.17, -0.24, 0.06, 0.06, 0.72, { color: '#e8dcc4' });
+        K.box(-0.17, -0.24, 0.063, 0.063, 0.05, { z: 0.6, color: '#3f8a6e' });
+        K.box(-0.17, -0.24, 0.03, 0.03, 0.07, { z: 0.72, color: '#e8dcc4' });
+        K.dome(-0.17, -0.24, 0.016, { z: 0.79, color: '#3f8a6e' });
+        K.light(-0.17, -0.24, 0.84);
+      });
+    } },
+    beijing: { rank: 1, style: 'asia', tall: 0.55, landmark: 'the Temple of Heaven and the Gate of Heavenly Peace', mark(K) {
+      K.flat(-0.2, 0.18, 0.34, 0.2, PLAZA);
+      K.group(-0.2, 0.02, () => {
+        K.box(-0.2, 0.02, 0.34, 0.1, 0.09, { color: '#b23a2e', arches: 3 });
+        K.box(-0.2, 0.02, 0.28, 0.08, 0.06, { z: 0.09, color: '#c2453a' });
+        K.pyr(-0.2, 0.02, 0.32, 0.12, 0.07, { z: 0.15, color: '#e0a92e' });
+      });
+      K.group(0.2, 0.18, () => {
+        for (const [r, z] of [[0.15, 0], [0.125, 0.03], [0.1, 0.06]]) K.cyl(0.2, 0.18, r, 0.03, { z, color: '#f2f0ea' });
+        let z = 0.09;
+        for (const [r, h, rr] of [[0.065, 0.06, 0.095], [0.054, 0.04, 0.08], [0.044, 0.035, 0.064]]) {
+          K.cyl(0.2, 0.18, r, h, { z, color: '#b23a2e' });
+          K.cone(0.2, 0.18, rr, 0.045, { z: z + h, color: '#2f5f8f' });
+          z += h + 0.035;
+        }
+        K.cone(0.2, 0.18, 0.03, 0.05, { z: z - 0.025, color: '#2f5f8f' });
+        K.sphere(0.2, 0.18, 0.014, { z: z + 0.03, color: '#e0a92e' });
+      });
+    } },
+    hyderabad: { rank: 1, style: 'concrete', tall: 0.6, landmark: 'the Charminar', mark(K) {
+      const [cx, cy] = [0.1, 0.1];
+      K.flat(cx, cy, 0.4, 0.4, PLAZA);
+      K.group(cx, cy, () => {
+        K.box(cx, cy, 0.2, 0.2, 0.2, { color: '#d9c7a4', arches: 1 });
+        K.box(cx, cy, 0.2, 0.2, 0.045, { z: 0.2, color: '#cfbb95' });
+        K.dome(cx, cy, 0.05, { z: 0.245, color: '#d9c7a4' });
+      });
+      for (const [x, y] of [[-0.095, -0.095], [0.095, -0.095], [-0.095, 0.095], [0.095, 0.095]]) {
+        K.group(cx + x, cy + y, () => {
+          K.cyl(cx + x, cy + y, 0.022, 0.48, { color: '#e2d2b2' });
+          K.dome(cx + x, cy + y, 0.028, { z: 0.48, color: '#e2d2b2' });
+        });
+      }
+    } },
+    sydney: { rank: 2, style: 'glass', landmark: 'the Opera House, the Harbour Bridge and Sydney Tower', mark(K) {
+      K.flat(0, 0.3, 0.9, 0.22, WATER);
+      K.group(0.24, 0.26, () => {
+        K.box(0.24, 0.26, 0.28, 0.14, 0.035, { color: '#d9c3a0' });
+        for (const [x, w, h] of [[0.13, 0.09, 0.13], [0.2, 0.11, 0.18], [0.28, 0.12, 0.22], [0.35, 0.08, 0.12]]) K.sail(x, 0.23, w, h, { z: 0.035, color: '#f6f4ee' });
+        for (const [x, w, h] of [[0.18, 0.07, 0.1], [0.26, 0.08, 0.13]]) K.sail(x, 0.3, w, h, { z: 0.035, color: '#f6f4ee' });
+      });
+      K.group(-0.22, 0.3, () => {
+        K.box(-0.4, 0.3, 0.035, 0.05, 0.13, { color: '#d6c8a8' });
+        K.box(-0.04, 0.3, 0.035, 0.05, 0.13, { color: '#d6c8a8' });
+        const arch = [];
+        for (let i = 0; i <= 10; i++) arch.push([-0.38 + i * 0.032, 0.3, 0.07 + Math.sin((i / 10) * Math.PI) * 0.2]);
+        K.line(arch, { color: '#7f8a8f', w: 3.4 });
+        K.line([[-0.4, 0.3, 0.07], [-0.04, 0.3, 0.07]], { color: '#8c979c', w: 2.6 });
+      });
+      tvTower(K, -0.12, -0.18, { h: 0.85, podAt: 0.82, podR: 0.06, color: '#d9d4c4', podColor: '#d9b44a', antenna: 0.12 });
+    } },
+    melbourne: { rank: 2, style: 'glass', landmark: 'Flinders Street Station and the Eureka Tower on the Yarra', mark(K) {
+      K.flat(0, 0.36, 0.9, 0.08, WATER);
+      K.group(-0.06, 0.22, () => {
+        K.box(-0.06, 0.22, 0.32, 0.07, 0.07, { color: '#e2a94f', arches: 4 });
+        K.box(-0.14, 0.22, 0.08, 0.08, 0.05, { z: 0.07, color: '#e2a94f' });
+        K.dome(-0.14, 0.22, 0.045, { z: 0.12, color: '#4f8a6e' });
+        K.box(0.07, 0.22, 0.035, 0.035, 0.1, { z: 0.07, color: '#e2a94f', roof: '#4f8a6e', roofH: 0.03 });
+      });
+      K.group(0.18, -0.12, () => {
+        K.box(0.18, -0.12, 0.08, 0.08, 0.95, { color: '#5d6e7c', windows: true });
+        K.box(0.18, -0.12, 0.08, 0.08, 0.1, { z: 0.95, color: '#e3b341' });
+        K.light(0.18, -0.12, 1.05);
+      });
+    } },
+    brisbane: { rank: 2, style: 'tropical', tall: 0.85, landmark: 'the Story Bridge and the Wheel of Brisbane on the river', mark(K) {
+      K.flat(0, 0.24, 0.9, 0.16, WATER);
+      for (const y of [0.06, 0.16, 0.36]) K.clear(0.26, y, 0.06);
+      K.bridge(0.26, 0.02, 0.26, 0.45, { kind: 'suspension', z: 0.07, h: 0.3, color: '#5f6f78' });
+      K.wheel(-0.2, 0.36, 0.09, { color: '#f4f4f4' });
+    } },
+    perth: { rank: 2, style: 'glass', tall: 0.95, landmark: 'the Bell Tower on the Swan River', mark(K) {
+      K.flat(0.05, 0.3, 0.9, 0.2, WATER);
+      K.flat(-0.3, -0.3, 0.3, 0.3, PARK);
+      K.group(-0.1, 0.15, () => {
+        K.cone(-0.1, 0.15, 0.05, 0.44, { color: '#9fc3d6' });
+        K.cyl(-0.1, 0.15, 0.042, 0.06, { z: 0.1, color: '#b87333' });
+        K.light(-0.1, 0.15, 0.44);
+      });
+    } },
+    adelaide: { rank: 3, style: 'concrete', tall: 0.8, landmark: 'the Adelaide Oval and the Park Lands around the city', mark(K) {
+      for (const [x, y, w, d] of [[0, -0.39, 0.9, 0.12], [0, 0.39, 0.9, 0.12], [-0.39, 0, 0.12, 0.66], [0.39, 0, 0.12, 0.66]]) K.flat(x, y, w, d, PARK);
+      K.flat(0, -0.3, 0.9, 0.04, WATER);
+      K.ring(-0.12, -0.39, 0.1, 0.05, { color: '#f0f0ec', inner: '#6fae55' });
+    } },
+    'gold-coast': { rank: 3, style: 'tropical', tall: 1.2, landmark: 'the Q1 tower above the surf beach', mark(K) {
+      K.flat(0.39, 0, 0.12, 0.9, WATER);
+      K.flat(0.3, 0, 0.08, 0.9, SAND);
+      stepped(K, 0.12, -0.06, [[0.07, 0.8]], { color: '#c9d6de', spire: 0.24, windows: true });
+      palms(K, [[0.29, -0.28], [0.3, -0.1], [0.29, 0.1], [0.3, 0.28]]);
+    } },
+    'sunshine-coast': { rank: 3, style: 'pastel', landmark: 'the Glass House Mountains behind the beaches', mark(K) {
+      K.flat(0.39, 0, 0.12, 0.9, WATER);
+      K.flat(0.3, 0, 0.08, 0.9, SAND);
+      K.hill(-0.28, -0.24, 0.07, 0.28, { color: '#5f7f5a' });
+      K.hill(-0.14, -0.33, 0.06, 0.2, { color: '#678a5f' });
+      K.hill(-0.35, -0.06, 0.05, 0.16, { color: '#678a5f' });
+      palms(K, [[0.29, -0.2], [0.3, 0.02], [0.29, 0.22]]);
+    } },
+    seattle: { rank: 2, style: 'glass', landmark: 'the Space Needle and Mount Rainier', mark(K) {
+      K.flat(-0.36, 0.05, 0.14, 0.9, WATER);
+      K.flat(0.14, 0.2, 0.2, 0.2, PARK);
+      tvTower(K, 0.14, 0.2, { h: 0.9, legs: true, podAt: 0.86, podR: 0.1, color: '#ecebe6', podColor: '#f2f1ec', antenna: 0.12 });
+      K.hill(0.26, -0.28, 0.2, 0.3, { color: '#8d969a', snow: true });
+    } },
+    cincinnati: { rank: 3, style: 'brick', landmark: 'the Roebling Suspension Bridge over the Ohio River', mark(K) {
+      K.flat(0, 0.3, 0.9, 0.14, WATER);
+      K.bridge(0.05, 0.1, 0.05, 0.44, { kind: 'suspension', z: 0.05, h: 0.2, color: '#3f6f9f' });
+      stepped(K, -0.14, -0.12, [[0.1, 0.42], [0.07, 0.12], [0.045, 0.06]], { color: '#c9b79a', windows: true });
+    } },
+    albuquerque: { rank: 3, style: 'adobe', landmark: 'hot-air balloons by the Sandia Mountains', mark(K) {
+      K.hill(0.28, -0.24, 0.2, 0.22, { color: '#b7867a' });
+      K.balloon(-0.12, -0.12, 0.5, 0.07, '#e4572e');
+      K.balloon(0.12, 0.02, 0.64, 0.06, '#f3c13a');
+      K.balloon(-0.24, 0.16, 0.42, 0.065, '#2e86ab');
+    } },
+    'state-college': { rank: 4, style: 'smalltown', landmark: 'Old Main and Beaver Stadium', mark(K) {
+      K.flat(-0.05, 0.13, 0.26, 0.14, PARK);
+      K.group(-0.05, -0.05, () => {
+        K.box(-0.05, -0.05, 0.2, 0.09, 0.09, { color: '#cdb98f', roof: '#55524f', roofH: 0.04 });
+        K.box(-0.05, -0.05, 0.05, 0.05, 0.1, { z: 0.09, color: '#f2efe6' });
+        K.dome(-0.05, -0.05, 0.027, { z: 0.19, color: '#f2efe6' });
+      });
+      K.ring(0.25, 0.22, 0.13, 0.08, { color: '#e6e8ea', inner: '#5f9b4f' });
     } },
   };
 
@@ -2160,6 +2453,38 @@
       poly(g, [[x - r, y - r / 2], [x, y], [x, y + r], [x - r, y + r / 2]], f.left);
       poly(g, [[x, y], [x + r, y - r / 2], [x + r, y + r / 2], [x, y + r]], f.right);
       R.mark(y - r);
+    },
+
+    // A curved shell standing along x, its tip leaning east (west with flip): the Sydney Opera House.
+    sail(R, it) {
+      const { g, tw } = R;
+      const o = it.o;
+      const z = o.z || 0;
+      const s = o.flip ? -1 : 1;
+      const at = (fx, fz) => R.S(it.dx + fx * s * o.w, it.dy, z + fz * o.h);
+      const [x0, y0] = at(-0.5, 0);
+      const [x1, y1] = at(0.5, 0);
+      const [ax, ay] = at(0.34, 1);
+      const [cx, cy] = at(-0.44, 0.96);
+      const [bx, by] = at(0.52, 0.5);
+      const f = faces(o.color);
+      g.fillStyle = f.left;
+      g.beginPath();
+      g.moveTo(x0, y0);
+      g.quadraticCurveTo(cx, cy, ax, ay);
+      g.quadraticCurveTo(bx, by, x1, y1);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = f.right;
+      g.lineWidth = Math.max(0.6, tw * 0.008);
+      g.stroke();
+      g.strokeStyle = f.top;
+      g.lineWidth = Math.max(0.8, tw * 0.014);
+      g.beginPath();
+      g.moveTo(x0, y0);
+      g.quadraticCurveTo(cx, cy, ax, ay);
+      g.stroke();
+      R.mark(Math.min(ay, cy));
     },
 
     plane(R, it) {
