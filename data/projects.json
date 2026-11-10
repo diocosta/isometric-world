@@ -1733,6 +1733,22 @@
       "technique": "data",
       "about": "The Albuquerque metro from the Sandia crest to the West Mesa volcanoes, rendered from OpenStreetMap and elevation data, with an overlay of parishes, Mass times, trails and public land.",
       "tags": ["searchable"]
+    },
+    {
+      "id": "ourense-ilustrado",
+      "name": "Ourense ilustrado",
+      "url": "https://xaora.com/ourense-mapa/",
+      "place": "Ourense",
+      "country": "Spain",
+      "lat": 42.336,
+      "lon": -7.864,
+      "by": "Abraham Martínez",
+      "byUrl": "https://x.com/mg_abraham",
+      "launched": "2026-11",
+      "technique": "ai",
+      "status": "wip",
+      "about": "Ourense on both banks of the Miño as one AI-painted illustration, alive with traffic, pedestrians, trains, a football match, rugby, canoes, hot springs and a rock concert, each with its own soundscape, in a Galician-language viewer.",
+      "tags": ["simulation"]
     }
   ]
 }
