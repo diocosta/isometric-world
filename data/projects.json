@@ -604,6 +604,21 @@
       "tags": ["playable"]
     },
     {
+      "id": "simrosario",
+      "name": "SimRosario",
+      "url": "https://urbagus.com/simrosario/",
+      "place": "Rosario",
+      "country": "Argentina",
+      "lat": -32.947,
+      "lon": -60.639,
+      "by": "Agustín Abraham (@urbagus)",
+      "byUrl": "https://x.com/urbagus",
+      "launched": "2026-11-11",
+      "technique": "ai",
+      "about": "All of Rosario as an isometric video-game city of almost 3 gigapixels, from the Monumento a la Bandera to the Paraná riverfront, with five hidden surprises to find across the map.",
+      "links": [{ "label": "How it was made", "url": "https://urbagus.com/simrosario/acerca/" }]
+    },
+    {
       "id": "isopolis-sf",
       "name": "Isopolis",
       "url": "https://sf.isopolis.city/",
