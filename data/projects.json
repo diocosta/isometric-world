@@ -258,6 +258,20 @@
       "links": [{ "label": "Source code", "url": "https://github.com/Chillchamp1/wedding-gezeichnet" }]
     },
     {
+      "id": "isometric-berlin-mertpeker",
+      "name": "Isometric Berlin",
+      "url": "https://isometricberlin.com/",
+      "place": "Berlin",
+      "country": "Germany",
+      "lat": 52.52,
+      "lon": 13.405,
+      "by": "Mert Peker",
+      "byUrl": "https://github.com/flamertt",
+      "technique": "3d",
+      "about": "Central Berlin inside the S-Bahn Ring, from Charlottenburg to Friedrichshain, built from the city's official 3D building model and aerial imagery. Rotate it a full 360°, set the time of day with night lighting, and share any view as a postcard.",
+      "tags": ["day & night"]
+    },
+    {
       "id": "eboy-pixorama",
       "name": "eBoy Pixoramas",
       "url": "https://www.eboy.com/",
